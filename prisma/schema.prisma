@@ -1,0 +1,208 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// --- Auth & Employees ---
+
+model Employee {
+  id              String    @id @default(uuid())
+  firstName       String
+  lastName        String
+  documentId      String    @unique
+  email           String    @unique
+  password        String
+  phone           String?
+  address         String?
+  role            Role      @default(RECEPTIONIST)
+  salary          Float?
+  contractDate    DateTime  @default(now())
+  isActive        Boolean   @default(true)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  // Relations
+  patients        Patient[]      @relation("DoctorPatients")
+  appointments    Appointment[]  @relation("DoctorAppointments")
+  procedures      ProcedureLog[] @relation("DoctorProcedures")
+  shifts          ShiftAssignment[]
+  auditLogs       AuditLog[]
+}
+
+enum Role {
+  ADMIN
+  DOCTOR
+  RECEPTIONIST
+  NURSE
+}
+
+// --- Patients ---
+
+model Patient {
+  id              String    @id @default(uuid())
+  firstName       String
+  lastName        String
+  birthDate       DateTime
+  gender          String
+  documentType    String
+  documentNumber  String    @unique
+  address         String?
+  phone           String
+  email           String?
+  
+  // Health Data
+  allergies       String?
+  chronicDiseases String?
+  medications     String?
+  familyHistory   String?
+
+  doctorId        String?
+  doctor          Employee? @relation("DoctorPatients", fields: [doctorId], references: [id])
+
+  isActive        Boolean   @default(true)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  appointments    Appointment[]
+  prescriptions   Prescription[]
+  procedures      ProcedureLog[]
+}
+
+// --- Appointments ---
+
+model Appointment {
+  id              String    @id @default(uuid())
+  date            DateTime
+  status          AppointmentStatus @default(SCHEDULED)
+  type            String    // CONSULTATION, EXAM, XRAY, etc.
+  description     String?
+  diagnosis       String?
+  treatment       String?
+  observations    String?
+
+  patientId       String
+  patient         Patient   @relation(fields: [patientId], references: [id])
+  
+  doctorId        String
+  doctor          Employee  @relation("DoctorAppointments", fields: [doctorId], references: [id])
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+}
+
+enum AppointmentStatus {
+  SCHEDULED
+  CONFIRMED
+  ATTENDED
+  CANCELLED
+}
+
+// --- Prescriptions ---
+
+model Prescription {
+  id              String    @id @default(uuid())
+  correlative     Int       @unique
+  date            DateTime  @default(now())
+  
+  patientId       String
+  patient         Patient   @relation(fields: [patientId], references: [id])
+  
+  doctorId        String
+  
+  items           PrescriptionItem[]
+  
+  isActive        Boolean   @default(true)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+}
+
+model PrescriptionItem {
+  id              String    @id @default(uuid())
+  drugName        String
+  presentation    String    // PILL, INJECTION, etc.
+  dosage          String
+  frequency       String
+  duration        String
+  
+  prescriptionId  String
+  prescription    Prescription @relation(fields: [prescriptionId], references: [id])
+}
+
+// --- Procedures ---
+
+model ProcedureType {
+  id              String    @id @default(uuid())
+  name            String    @unique
+  description     String?
+  price           Float
+  risks           String?
+  isActive        Boolean   @default(true)
+  
+  logs            ProcedureLog[]
+}
+
+model ProcedureLog {
+  id              String    @id @default(uuid())
+  date            DateTime  @default(now())
+  anesthesiaType  String?
+  notes           String?
+  status          ProcedureStatus @default(COMPLETED)
+
+  procedureTypeId String
+  procedureType   ProcedureType @relation(fields: [procedureTypeId], references: [id])
+  
+  patientId       String
+  patient         Patient       @relation(fields: [patientId], references: [id])
+  
+  doctorId        String
+  doctor          Employee      @relation("DoctorProcedures", fields: [doctorId], references: [id])
+}
+
+enum ProcedureStatus {
+  PENDING
+  COMPLETED
+  CANCELLED
+}
+
+// --- Shifts ---
+
+model Shift {
+  id              String    @id @default(uuid())
+  name            String    // Morning, Afternoon, Night
+  startTime       String    // HH:mm
+  endTime         String    // HH:mm
+  isActive        Boolean   @default(true)
+
+  assignments     ShiftAssignment[]
+}
+
+model ShiftAssignment {
+  id              String    @id @default(uuid())
+  date            DateTime
+  
+  employeeId      String
+  employee        Employee  @relation(fields: [employeeId], references: [id])
+  
+  shiftId         String
+  shift           Shift     @relation(fields: [shiftId], references: [id])
+
+  @@unique([date, employeeId, shiftId])
+}
+
+// --- Audit ---
+
+model AuditLog {
+  id              String    @id @default(uuid())
+  action          String    // CREATE, UPDATE, DELETE, CANCEL
+  entity          String    // Patient, Appointment, etc.
+  entityId        String
+  details         String?
+  timestamp       DateTime  @default(now())
+  
+  userId          String?
+  user            Employee? @relation(fields: [userId], references: [id])
+}
